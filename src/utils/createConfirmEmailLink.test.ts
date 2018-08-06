@@ -4,7 +4,8 @@ import { User } from "../entity/User";
 import * as Redis from "ioredis";
 import fetch from "node-fetch";
 
-let userId = " ";
+let userId = "";
+const redis = new Redis();
 
 beforeAll(async () => {
   await createTypeOrmConn();
@@ -14,14 +15,21 @@ beforeAll(async () => {
   }).save();
   userId = user.id;
 });
-test("Make sure createConfirmEmailLink works", async () => {
+test("Make sure it confirms user and clears key in redis", async () => {
   const url = await createConfirmEmailLink(
     process.env.TEST_HOST as string,
     userId,
-    new Redis()
+    redis
   );
 
   const response = await fetch(url);
   const text = await response.text();
-  console.log(text);
+  expect(text).toEqual("ok");
+
+  const user = await User.findOne({ where: { id: userId } });
+  expect((user as User).confirmed).toBeTruthy();
+  const chunks = url.split("/");
+  const key = chunks[chunks.length - 1];
+  const value = await redis.get(key);
+  expect(value).toBeNull();
 });
